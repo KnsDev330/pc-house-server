@@ -1,11 +1,9 @@
 require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
-const JsonWebToken = require('jsonwebtoken');
+const jsonwebtoken = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ExplainVerbosity, ObjectId } = require('mongodb');
 
-// custom files
-const { getJwt } = require('./Endpoints/getJwt');
 
 // server
 const app = express();
@@ -22,13 +20,29 @@ const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTop
 client.connect(async (error) => {
     if (error) throw new Error('Cannot connect to Database'); // throw error if can't connect to database
 
+    // collections
+    const userCollection = client.db('pc-house').collection('users');
+    const partCollection = client.db('pc-house').collection('parts');
 
-    // default server response
+
     app.get('/', (req, res) => {
         res.send({ ok: true, text: '👍 Server is up and running' })
-    });
+    }); // default server response
 
-    app.post('/get-jwt', getJwt); // Request for JsonWebToken
+    app.get('/get-parts', async (req, res) => {
+        const parts = await partCollection.find({}).toArray();
+        res.send({ ok: true, text: `Success`, parts });
+    }); // parts
+
+    app.post('/get-jwt', (req, res) => {
+        const uid = req.body?.uid;
+        console.log(req.body)
+        if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
+        jsonwebtoken.sign({ uid }, process.env.JWT_SECRET, (err, token) => {
+            if (err) return res.status(500).send({ ok: false, text: `${err?.message}` });
+            res.send({ ok: true, text: `Success`, token });
+        });
+    }); // Request for JsonWebToken
 
 
     // start the server
