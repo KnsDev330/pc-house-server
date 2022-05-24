@@ -4,6 +4,9 @@ const express = require('express');
 const JsonWebToken = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ExplainVerbosity, ObjectId } = require('mongodb');
 
+// custom files
+const { getJwt } = require('./Endpoints/getJwt');
+
 // server
 const app = express();
 app.use(express.json());
@@ -12,6 +15,7 @@ const PORT = process.env.PORT || 5000; // server port
 
 // mongo URI
 const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@cluster0.ijwja.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
+
 
 // connect to mongodb
 const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
@@ -24,6 +28,7 @@ client.connect(async (error) => {
         res.send({ ok: true, text: '👍 Server is up and running' })
     });
 
+    app.post('/get-jwt', getJwt); // Request for JsonWebToken
 
 
     // start the server
