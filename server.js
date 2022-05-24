@@ -34,6 +34,11 @@ client.connect(async (error) => {
         res.send({ ok: true, text: `Success`, parts });
     }); // parts
 
+    app.get('/get-part/:id', async (req, res) => {
+        const part = await partCollection.findOne({ id: req.params.id });
+        res.send({ ok: true, text: `Success`, part });
+    }); // part details
+
     app.post('/get-jwt', (req, res) => {
         const uid = req.body?.uid;
         console.log(req.body)
