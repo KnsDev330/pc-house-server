@@ -30,7 +30,6 @@ client.connect(async (error) => {
 
     // verify if admin
     const verifyAdmin = (req, res, next) => {
-        console.log(req.headers);
         const { authorization } = req.headers;
         if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
         const jwt = authorization.split(' ')[1];
@@ -38,7 +37,6 @@ client.connect(async (error) => {
             jsonwebtoken.verify(jwt, process.env.JWT_SECRET, async (err, decoded) => {
                 if (err) return res.status(403).send({ ok: false, text: `Forbidden` });
                 const userDetails = await userCollection.findOne({ uid: decoded.uid });
-                console.log(userDetails)
                 if (userDetails?.role !== 'admin') return res.status(403).send({ ok: false, text: `Forbidden` });
                 req.decoded = decoded;
                 next();
@@ -72,6 +70,12 @@ client.connect(async (error) => {
     }); // get part details
 
 
+    app.get('/is-admin/:uid', async (req, res) => {
+        const result = await userCollection.findOne({ uid: req.params.uid });
+        res.send({ ok: true, text: `Success`, isadmin: result.role === 'admin' });
+    }); // check if user is admin
+
+
     app.put('/make-admin/:uid', verifyAdmin, async (req, res) => {
         const result = await userCollection.updateOne({ uid: req.params.uid }, { $set: { role: `admin` } });
         res.send({ ok: true, text: `Success`, result });
@@ -82,7 +86,6 @@ client.connect(async (error) => {
         const uid = req.body?.uid;
         const email = req.body?.email;
         const name = req.body?.name;
-        console.log(req.body)
         if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
         jsonwebtoken.sign({ uid }, process.env.JWT_SECRET, async (err, token) => {
             if (err) return res.status(500).send({ ok: false, text: `${err?.message}` });
