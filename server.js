@@ -60,6 +60,7 @@ client.connect(async (error) => {
     const partCollection = client.db('pc-house').collection('parts');
     const orderCollection = client.db('pc-house').collection('orders');
     const paymentCollection = client.db('pc-house').collection('payments');
+    const reviewCollection = client.db('pc-house').collection('reviews');
 
 
 
@@ -105,6 +106,16 @@ client.connect(async (error) => {
         const orders = (await orderCollection.find({ uid }).toArray()).reverse();
         res.send({ ok: true, text: `Success`, orders });
     }); // get my orders
+
+
+    app.get('/get-reviews/:uid', async (req, res) => {
+        const { uid } = req.params;
+        if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
+        let query = { uid };
+        if (uid === 'all') query = {};
+        const reviews = await reviewCollection.find(query).sort({ time: -1 }).toArray();
+        res.send({ ok: true, text: `Success`, reviews });
+    }); // get reviews
 
 
     app.get('/get-part/:id', async (req, res) => {
