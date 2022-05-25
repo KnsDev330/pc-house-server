@@ -108,6 +108,12 @@ client.connect(async (error) => {
     }); // get my orders
 
 
+    app.get('/get-all-orders', verifyAdmin, async (req, res) => {
+        const orders = (await orderCollection.find({}).toArray()).reverse();
+        res.send({ ok: true, text: `Success`, orders });
+    }); // get my orders
+
+
     app.get('/get-reviews/:uid', async (req, res) => {
         const { uid } = req.params;
         if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
@@ -146,7 +152,11 @@ client.connect(async (error) => {
     app.delete('/cancel-order/:orderid', verifyJwt, async (req, res) => {
         const result = await orderCollection.deleteOne({ _id: ObjectId(req.params.orderid) });
         res.send({ ok: true, text: `Deleted successfully`, result });
-    }); // make admin
+    }); // delete order
+    app.delete('/delete-order/:orderid', verifyAdmin, async (req, res) => {
+        const result = await orderCollection.deleteOne({ _id: ObjectId(req.params.orderid) });
+        res.send({ ok: true, text: `Deleted successfully`, result });
+    }); // delete order by admin
 
 
     app.post('/get-jwt', (req, res) => {
@@ -186,6 +196,14 @@ client.connect(async (error) => {
         req.body.data.paid = false;
         const result = await orderCollection.insertOne(req.body.data);
         res.send({ ok: true, text: `Order placed successfully`, result });
+    }); // Place order request
+
+
+    app.patch('/order-shipped', verifyAdmin, async (req, res) => {
+        const { orderId } = req.body;
+        if (!orderId) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const update = await orderCollection.updateOne({ _id: ObjectId(orderId) }, { $set: { status: 'shipped' } });
+        res.send({ ok: true, text: `Order shipped successfully`, update });
     }); // Place order request
 
 
