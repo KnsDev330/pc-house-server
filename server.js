@@ -2,7 +2,8 @@ require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
 const jsonwebtoken = require('jsonwebtoken');
-const { MongoClient, ServerApiVersion, ExplainVerbosity, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 
 // server
@@ -32,6 +33,20 @@ const verifyUid = (req, res, next) => {
         return res.status(500).send({ ok: false, text: `${error.message}` });
     }
 }
+const verifyJwt = (req, res, next) => {
+    const { authorization } = req.headers;
+    if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
+    const jwt = authorization.split(' ')[1];
+    try {
+        jsonwebtoken.verify(jwt, process.env.JWT_SECRET, async (err, decoded) => {
+            if (err) return res.status(403).send({ ok: false, text: `Forbidden` });
+            req.decoded = decoded;
+            next();
+        });
+    } catch (error) {
+        return res.status(500).send({ ok: false, text: `${error.message}` });
+    }
+}
 
 
 
@@ -44,6 +59,7 @@ client.connect(async (error) => {
     const userCollection = client.db('pc-house').collection('users');
     const partCollection = client.db('pc-house').collection('parts');
     const orderCollection = client.db('pc-house').collection('orders');
+    const paymentCollection = client.db('pc-house').collection('payments');
 
 
 
@@ -83,9 +99,24 @@ client.connect(async (error) => {
     }); // get parts
 
 
+    app.get('/get-my-orders', verifyJwt, async (req, res) => {
+        const { uid } = req.decoded;
+        console.log(req.decoded);
+        const orders = (await orderCollection.find({ uid }).toArray()).reverse();
+        res.send({ ok: true, text: `Success`, orders });
+    }); // get my orders
+
+
     app.get('/get-part/:id', async (req, res) => {
         const part = await partCollection.findOne({ id: req.params.id });
         res.send({ ok: true, text: `Success`, part });
+    }); // get part details
+
+
+    app.get('/get-order/:orderid', verifyJwt, async (req, res) => {
+        const order = await orderCollection.findOne({ _id: ObjectId(req.params.orderid) });
+        // console.log(order);
+        res.send({ ok: true, text: `Success`, order });
     }); // get part details
 
 
@@ -101,6 +132,12 @@ client.connect(async (error) => {
     }); // make admin
 
 
+    app.delete('/cancel-order/:orderid', verifyJwt, async (req, res) => {
+        const result = await orderCollection.deleteOne({ _id: ObjectId(req.params.orderid) });
+        res.send({ ok: true, text: `Deleted successfully`, result });
+    }); // make admin
+
+
     app.post('/get-jwt', (req, res) => {
         const uid = req.body?.uid;
         const email = req.body?.email;
@@ -113,6 +150,20 @@ client.connect(async (error) => {
         });
     }); // Request for JsonWebToken
 
+    app.post('/create-payment-intent', verifyJwt, async (req, res) => {
+        // console.log(req.body)
+        const { orderId } = req.body;
+        const orderDetails = await orderCollection.findOne({ _id: ObjectId(orderId) });
+        console.log(orderDetails);
+        const amount = Number((orderDetails.unitPrice * orderDetails.quantity * 100).toFixed(0));
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount,
+            currency: 'usd',
+            payment_method_types: ['card']
+        });
+        res.send({ ok: true, text: `Success`, intent: paymentIntent.client_secret });
+    }); // Create Payment Intent
+
 
     app.post('/place-order', verifyUid, async (req, res) => {
         const { uid, partId, address, email, name, partName, phone, quantity } = req.body?.data;
@@ -120,8 +171,21 @@ client.connect(async (error) => {
         const { price } = await partCollection.findOne({ id: partId });
         if (price <= 0) return res.status(400).send({ ok: false, text: `Bad Request` });
         req.body.data.unitPrice = price;
+        req.body.data.paid = false;
         const result = await orderCollection.insertOne(req.body.data);
         res.send({ ok: true, text: `Order placed successfully`, result });
+    }); // Place order request
+
+
+    app.patch('/store-payment', verifyJwt, async (req, res) => {
+        const { payment } = req.body;
+        if (!payment) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const { orderId, txid } = payment;
+        if (!orderId || !txid) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const update = await orderCollection.updateOne({ _id: ObjectId(orderId) }, { $set: { paid: true, txid } });
+        payment.uid = req.decoded?.uid;
+        const insert = await paymentCollection.insertOne(payment);
+        res.send({ ok: true, text: `Order paid & stored successfully`, update, insert });
     }); // Place order request
 
 
