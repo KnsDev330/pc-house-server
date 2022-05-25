@@ -16,6 +16,24 @@ const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGO
 
 
 
+const verifyUid = (req, res, next) => {
+    const { authorization } = req.headers;
+    const { uid } = req.body?.data;
+    // console.log(req.headers.authorization, req.body)
+    if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
+    const jwt = authorization.split(' ')[1];
+    try {
+        jsonwebtoken.verify(jwt, process.env.JWT_SECRET, async (err, decoded) => {
+            if (err) return res.status(403).send({ ok: false, text: `Forbidden` });
+            if (decoded.uid !== uid) return res.status(403).send({ ok: false, text: `Forbidden` });
+            next();
+        });
+    } catch (error) {
+        return res.status(500).send({ ok: false, text: `${error.message}` });
+    }
+}
+
+
 
 // connect to mongodb
 const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
@@ -25,6 +43,7 @@ client.connect(async (error) => {
     // collections
     const userCollection = client.db('pc-house').collection('users');
     const partCollection = client.db('pc-house').collection('parts');
+    const orderCollection = client.db('pc-house').collection('orders');
 
 
 
@@ -42,7 +61,7 @@ client.connect(async (error) => {
                 next();
             });
         } catch (error) {
-            return res.status(500).send({ ok: false, text: `${error.message}` });
+            return res.status(403).send({ ok: false, text: `${error.message}` });
         }
     }
 
@@ -93,6 +112,17 @@ client.connect(async (error) => {
             res.send({ ok: true, text: `Success`, token, user });
         });
     }); // Request for JsonWebToken
+
+
+    app.post('/place-order', verifyUid, async (req, res) => {
+        const { uid, partId, address, email, name, partName, phone, quantity } = req.body?.data;
+        if (!uid || !partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const { price } = await partCollection.findOne({ id: partId });
+        if (price <= 0) return res.status(400).send({ ok: false, text: `Bad Request` });
+        req.body.data.unitPrice = price;
+        const result = await orderCollection.insertOne(req.body.data);
+        res.send({ ok: true, text: `Order placed successfully`, result });
+    }); // Place order request
 
 
     // start the server
