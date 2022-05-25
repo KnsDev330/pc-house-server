@@ -142,6 +142,7 @@ client.connect(async (error) => {
         const uid = req.body?.uid;
         const email = req.body?.email;
         const name = req.body?.name;
+        console.log('jwt', req.body);
         if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
         jsonwebtoken.sign({ uid }, process.env.JWT_SECRET, async (err, token) => {
             if (err) return res.status(500).send({ ok: false, text: `${err?.message}` });
