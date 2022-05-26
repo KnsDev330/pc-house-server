@@ -142,10 +142,22 @@ client.connect(async (error) => {
         res.send({ ok: true, text: `Success`, isadmin: result.role === 'admin' });
     }); // check if user is admin
 
+    app.get('/profile', verifyJwt, async (req, res) => {
+        const profile = await userCollection.findOne({ uid: req.decoded.uid });
+        res.send({ ok: true, text: `Success`, profile });
+    }); // get profile
+
+    app.patch('/profile', verifyJwt, async (req, res) => {
+        const { uid } = req.body?.data;
+        if (!uid || req.decoded.uid !== uid) return res.status(401).send({ ok: false, text: `Unauthorized access` });
+        const update = await userCollection.updateOne({ uid: uid }, { $set: req.body.data });
+        res.send({ ok: true, text: `Success`, update });
+    }); // update profile
+
 
     app.put('/make-admin/:uid', verifyAdmin, async (req, res) => {
         const result = await userCollection.updateOne({ uid: req.params.uid }, { $set: { role: `admin` } });
-        res.send({ ok: true, text: `Success`, result });
+        res.send({ ok: true, text: `Updated successfully`, result });
     }); // make admin
 
 
