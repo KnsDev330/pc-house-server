@@ -51,7 +51,7 @@ client.connect(async (error) => {
     // verify if admin
     const verifyAdmin = (req, res, next) => {
         const { authorization } = req.headers;
-        if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
+        if (!authorization) return res.status(401).send({ ok: false, text: `Unauthorized access` });
         const jwt = authorization.split(' ')[1];
         try {
             jsonwebtoken.verify(jwt, process.env.JWT_SECRET, async (err, decoded) => {
@@ -69,7 +69,13 @@ client.connect(async (error) => {
 
     app.get('/', (req, res) => {
         res.send({ ok: true, text: '👍 Server is up and running' })
-    }); // default server response
+    }); // default server response    
+    /* FOR GETTING A DEMO PRODUCT DETAILS */
+    app.get('/demo', verifyAdmin, async (req, res) => {
+        const part = await partCollection.aggregate([{ $sample: { size: 1 } }]).toArray();
+        res.send({ ok: true, text: `Success`, demo: part[0] });
+    });
+    /* FOR GETTING A DEMO PRODUCT DETAILS */
 
 
     app.get('/get-users', verifyAdmin, async (req, res) => {
@@ -79,7 +85,7 @@ client.connect(async (error) => {
 
 
     app.get('/get-parts', async (req, res) => {
-        const parts = await partCollection.find({}).toArray();
+        const parts = (await partCollection.find({}).toArray()).reverse();
         res.send({ ok: true, text: `Success`, parts });
     }); // get parts
 
@@ -198,6 +204,19 @@ client.connect(async (error) => {
         await partCollection.updateOne({ id: partId }, { $inc: { available: -quantity } }); // update quantity on order placing
         res.send({ ok: true, text: `Order placed successfully`, result });
     }); // Place order request
+
+
+    app.post('/add-product', verifyAdmin, async (req, res) => {
+        const { id, name, img, price, minimum, available, desc } = req.body?.data;
+        if (!id || !name || !img || !price || !minimum || !available || !desc) return res.status(400).send({ ok: false, text: `Badly formatted data` });
+        if (minimum > available) return res.status(400).send({ ok: false, text: `Minimum cannot be greater than available` }); // check if product id is available on db
+        const dbProduct = await partCollection.findOne({ id });
+        if (dbProduct?.id) return res.status(507).send({ ok: false, text: `ID already in use, please make some change` }); // check if product id is available on db
+        const product = req.body.data;
+        product.admin = req.decoded.uid;
+        const result = await partCollection.insertOne(product); // insert order in db
+        res.send({ ok: true, text: `Product added successfully`, result });
+    }); // Add a new product
 
 
     app.post('/add-review', verifyJwt, async (req, res) => {
