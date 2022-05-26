@@ -92,7 +92,6 @@ client.connect(async (error) => {
 
     app.get('/get-my-orders', verifyJwt, async (req, res) => {
         const { uid } = req.decoded;
-        console.log(req.decoded);
         const orders = (await orderCollection.find({ uid }).toArray()).reverse();
         res.send({ ok: true, text: `Success`, orders });
     }); // get my orders
@@ -122,7 +121,6 @@ client.connect(async (error) => {
 
     app.get('/get-order/:orderid', verifyJwt, async (req, res) => {
         const order = await orderCollection.findOne({ _id: ObjectId(req.params.orderid) });
-        // console.log(order);
         res.send({ ok: !!order, text: !!order ? `Success` : `Order not found`, order });
     }); // get part details
 
@@ -152,20 +150,27 @@ client.connect(async (error) => {
 
 
     app.delete('/cancel-order/:orderid', verifyJwt, async (req, res) => {
+        if (!req.params.orderid) return res.status(400).send({ ok: false, text: `Bad request` });
         const result = await orderCollection.deleteOne({ _id: ObjectId(req.params.orderid) });
         res.send({ ok: true, text: `Deleted successfully`, result });
     }); // delete order
+
     app.delete('/delete-order/:orderid', verifyAdmin, async (req, res) => {
+        if (!req.params.orderid) return res.status(400).send({ ok: false, text: `Bad request` });
         const result = await orderCollection.deleteOne({ _id: ObjectId(req.params.orderid) });
         res.send({ ok: true, text: `Deleted successfully`, result });
     }); // delete order by admin
+    app.delete('/delete-product/:productid', verifyAdmin, async (req, res) => {
+        if (!req.params.productid) return res.status(400).send({ ok: false, text: `Bad request` });
+        const result = await partCollection.deleteOne({ _id: ObjectId(req.params.productid) });
+        res.send({ ok: true, text: `Deleted successfully`, result });
+    }); // delete product by admin
 
 
     app.post('/get-jwt', (req, res) => {
         const uid = req.body?.uid;
         const email = req.body?.email;
         const name = req.body?.name;
-        console.log('jwt', req.body);
         if (!uid) return res.status(400).send({ ok: false, text: `Invalid User ID provided` });
         jsonwebtoken.sign({ uid }, process.env.JWT_SECRET, async (err, token) => {
             if (err) return res.status(500).send({ ok: false, text: `${err?.message}` });
@@ -175,10 +180,8 @@ client.connect(async (error) => {
     }); // Request for JsonWebToken
 
     app.post('/create-payment-intent', verifyJwt, async (req, res) => {
-        // console.log(req.body)
         const { orderId } = req.body;
         const orderDetails = await orderCollection.findOne({ _id: ObjectId(orderId) });
-        console.log(orderDetails);
         const amount = Number((orderDetails.unitPrice * orderDetails.quantity * 100).toFixed(0));
         const paymentIntent = await stripe.paymentIntents.create({
             amount,
@@ -194,7 +197,6 @@ client.connect(async (error) => {
         if (!partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
         const order = req.body.data;
         const dbPart = await partCollection.findOne({ id: partId });
-        console.log(dbPart);
         if (!dbPart?.price) return res.status(400).send({ ok: false, text: `Bad Request` }); // check if product is on db
         order.unitPrice = dbPart.price;
         order.paid = false;
@@ -214,6 +216,9 @@ client.connect(async (error) => {
         if (dbProduct?.id) return res.status(507).send({ ok: false, text: `ID already in use, please make some change` }); // check if product id is available on db
         const product = req.body.data;
         product.admin = req.decoded.uid;
+        product.price = Number(price);
+        product.minimum = Number(minimum);
+        product.available = Number(available);
         const result = await partCollection.insertOne(product); // insert order in db
         res.send({ ok: true, text: `Product added successfully`, result });
     }); // Add a new product
