@@ -14,25 +14,9 @@ const PORT = process.env.PORT || 5000; // server port
 
 // mongo URI
 const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@cluster0.ijwja.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
+// const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@cluster0.y0t34wl.mongodb.net/?retryWrites=true&w=majority`;
 
 
-
-const verifyUid = (req, res, next) => {
-    const { authorization } = req.headers;
-    const { uid } = req.body?.data;
-    // console.log(req.headers.authorization, req.body)
-    if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
-    const jwt = authorization.split(' ')[1];
-    try {
-        jsonwebtoken.verify(jwt, process.env.JWT_SECRET, async (err, decoded) => {
-            if (err) return res.status(403).send({ ok: false, text: `Forbidden` });
-            if (decoded.uid !== uid) return res.status(403).send({ ok: false, text: `Forbidden` });
-            next();
-        });
-    } catch (error) {
-        return res.status(500).send({ ok: false, text: `${error.message}` });
-    }
-}
 const verifyJwt = (req, res, next) => {
     const { authorization } = req.headers;
     if (!authorization) return res.status(400).send({ ok: false, text: `No JWT was found` });
@@ -53,7 +37,7 @@ const verifyJwt = (req, res, next) => {
 // connect to mongodb
 const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 client.connect(async (error) => {
-    if (error) throw new Error('Cannot connect to Database'); // throw error if can't connect to database
+    if (error) throw new Error('Cannot connect to Database ' + error); // throw error if can't connect to database
 
     // collections
     const userCollection = client.db('pc-house').collection('users');
@@ -133,13 +117,13 @@ client.connect(async (error) => {
     app.get('/get-order/:orderid', verifyJwt, async (req, res) => {
         const order = await orderCollection.findOne({ _id: ObjectId(req.params.orderid) });
         // console.log(order);
-        res.send({ ok: true, text: `Success`, order });
+        res.send({ ok: !!order, text: !!order ? `Success` : `Order not found`, order });
     }); // get part details
 
 
     app.get('/is-admin/:uid', async (req, res) => {
         const result = await userCollection.findOne({ uid: req.params.uid });
-        res.send({ ok: true, text: `Success`, isadmin: result.role === 'admin' });
+        res.send({ ok: true, text: `Success`, isadmin: result?.role === 'admin' });
     }); // check if user is admin
 
     app.get('/profile', verifyJwt, async (req, res) => {
@@ -199,16 +183,34 @@ client.connect(async (error) => {
     }); // Create Payment Intent
 
 
-    app.post('/place-order', verifyUid, async (req, res) => {
-        const { uid, partId, address, email, name, partName, phone, quantity } = req.body?.data;
-        if (!uid || !partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
-        const { price } = await partCollection.findOne({ id: partId });
-        if (price <= 0) return res.status(400).send({ ok: false, text: `Bad Request` });
-        req.body.data.unitPrice = price;
-        req.body.data.paid = false;
-        const result = await orderCollection.insertOne(req.body.data);
+    app.post('/place-order', verifyJwt, async (req, res) => {
+        const { partId, address, email, name, partName, phone, quantity } = req.body?.data;
+        if (!partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const order = req.body.data;
+        const dbPart = await partCollection.findOne({ id: partId });
+        console.log(dbPart);
+        if (!dbPart?.price) return res.status(400).send({ ok: false, text: `Bad Request` }); // check if product is on db
+        order.unitPrice = dbPart.price;
+        order.paid = false;
+        order.status = 'unpaid';
+        order.uid = req.decoded.uid;
+        const result = await orderCollection.insertOne(order); // insert order in db
+        await partCollection.updateOne({ id: partId }, { $inc: { available: -quantity } }); // update quantity on order placing
         res.send({ ok: true, text: `Order placed successfully`, result });
     }); // Place order request
+
+
+    app.post('/add-review', verifyJwt, async (req, res) => {
+        const { rating, text, img } = req.body?.data;
+        if (!rating || !text || !img || Number(rating) < 1 || Number(rating) > 5) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const dbUser = await userCollection.findOne({ uid: req.decoded.uid });
+        const review = req.body.data;
+        review.uid = req.decoded.uid;
+        review.name = dbUser?.name || `Anonymouse`;
+        review.time = Number((new Date().getTime() / 1000).toFixed(0));
+        const result = await reviewCollection.insertOne(review);
+        res.send({ ok: true, text: `Review added successfully`, result });
+    }); // Add areview
 
 
     app.patch('/order-shipped', verifyAdmin, async (req, res) => {
