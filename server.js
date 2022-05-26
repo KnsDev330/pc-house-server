@@ -120,6 +120,7 @@ client.connect(async (error) => {
 
     app.get('/get-order/:orderid', verifyJwt, async (req, res) => {
         const order = await orderCollection.findOne({ _id: ObjectId(req.params.orderid) });
+        if (order.uid !== req.decoded.uid) return res.status(400).send({ ok: false, text: `User ID mismatch` });
         res.send({ ok: !!order, text: !!order ? `Success` : `Order not found`, order });
     }); // get order details
 
@@ -192,8 +193,8 @@ client.connect(async (error) => {
 
 
     app.post('/place-order', verifyJwt, async (req, res) => {
-        const { partId, address, email, name, partName, phone, quantity } = req.body?.data;
-        if (!partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
+        const { partId, address, name, partName, phone, quantity } = req.body?.data;
+        if (!partId || !address || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
         const order = req.body.data;
         const dbPart = await partCollection.findOne({ _id: ObjectId(partId) });
         if (!dbPart?.price) return res.status(400).send({ ok: false, text: `Bad Request` }); // check if product is on db
