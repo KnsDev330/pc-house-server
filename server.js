@@ -14,7 +14,6 @@ const PORT = process.env.PORT || 5000; // server port
 
 // mongo URI
 const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@cluster0.ijwja.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
-// const MONGO_URI = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@cluster0.y0t34wl.mongodb.net/?retryWrites=true&w=majority`;
 
 
 const verifyJwt = (req, res, next) => {
@@ -100,7 +99,7 @@ client.connect(async (error) => {
     app.get('/get-all-orders', verifyAdmin, async (req, res) => {
         const orders = (await orderCollection.find({}).toArray()).reverse();
         res.send({ ok: true, text: `Success`, orders });
-    }); // get my orders
+    }); // get all orders
 
 
     app.get('/get-reviews/:uid', async (req, res) => {
@@ -122,7 +121,7 @@ client.connect(async (error) => {
     app.get('/get-order/:orderid', verifyJwt, async (req, res) => {
         const order = await orderCollection.findOne({ _id: ObjectId(req.params.orderid) });
         res.send({ ok: !!order, text: !!order ? `Success` : `Order not found`, order });
-    }); // get part details
+    }); // get order details
 
 
     app.get('/is-admin/:uid', async (req, res) => {
@@ -240,7 +239,7 @@ client.connect(async (error) => {
         if (!orderId) return res.status(400).send({ ok: false, text: `Bad Request` });
         const update = await orderCollection.updateOne({ _id: ObjectId(orderId) }, { $set: { status: 'shipped' } });
         res.send({ ok: true, text: `Order shipped successfully`, update });
-    }); // Place order request
+    }); // Order shipped
 
 
     app.patch('/store-payment', verifyJwt, async (req, res) => {
@@ -252,7 +251,7 @@ client.connect(async (error) => {
         payment.uid = req.decoded?.uid;
         const insert = await paymentCollection.insertOne(payment);
         res.send({ ok: true, text: `Order paid & stored successfully`, update, insert });
-    }); // Place order request
+    }); // update order and store payment
 
 
     // start the server
