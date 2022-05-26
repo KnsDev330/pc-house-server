@@ -72,8 +72,8 @@ client.connect(async (error) => {
     }); // default server response    
     /* FOR GETTING A DEMO PRODUCT DETAILS */
     app.get('/demo', verifyAdmin, async (req, res) => {
-        const part = await partCollection.aggregate([{ $sample: { size: 1 } }]).toArray();
-        res.send({ ok: true, text: `Success`, demo: part[0] });
+        const parts = await partCollection.find({}).toArray();
+        res.send({ ok: true, text: `Success`, demo: parts[Number(Math.floor(Math.random() * parts.length))] });
     });
     /* FOR GETTING A DEMO PRODUCT DETAILS */
 
@@ -114,7 +114,7 @@ client.connect(async (error) => {
 
 
     app.get('/get-part/:id', async (req, res) => {
-        const part = await partCollection.findOne({ id: req.params.id });
+        const part = await partCollection.findOne({ _id: ObjectId(req.params.id) });
         res.send({ ok: true, text: `Success`, part });
     }); // get part details
 
@@ -196,29 +196,27 @@ client.connect(async (error) => {
         const { partId, address, email, name, partName, phone, quantity } = req.body?.data;
         if (!partId || !address || !email || !name || !partName || !phone || !quantity) return res.status(400).send({ ok: false, text: `Bad Request` });
         const order = req.body.data;
-        const dbPart = await partCollection.findOne({ id: partId });
+        const dbPart = await partCollection.findOne({ _id: ObjectId(partId) });
         if (!dbPart?.price) return res.status(400).send({ ok: false, text: `Bad Request` }); // check if product is on db
         order.unitPrice = dbPart.price;
         order.paid = false;
         order.status = 'unpaid';
         order.uid = req.decoded.uid;
         const result = await orderCollection.insertOne(order); // insert order in db
-        await partCollection.updateOne({ id: partId }, { $inc: { available: -quantity } }); // update quantity on order placing
+        await partCollection.updateOne({ _id: ObjectId(partId) }, { $inc: { available: -quantity } }); // update quantity on order placing
         res.send({ ok: true, text: `Order placed successfully`, result });
     }); // Place order request
 
 
     app.post('/add-product', verifyAdmin, async (req, res) => {
-        const { id, name, img, price, minimum, available, desc } = req.body?.data;
-        if (!id || !name || !img || !price || !minimum || !available || !desc) return res.status(400).send({ ok: false, text: `Badly formatted data` });
-        if (minimum > available) return res.status(400).send({ ok: false, text: `Minimum cannot be greater than available` }); // check if product id is available on db
-        const dbProduct = await partCollection.findOne({ id });
-        if (dbProduct?.id) return res.status(507).send({ ok: false, text: `ID already in use, please make some change` }); // check if product id is available on db
+        const { name, img, price, minimum, available, desc } = req.body?.data;
+        if (!name || !img || !price || !minimum || !available || !desc) return res.status(400).send({ ok: false, text: `Badly formatted data` });
         const product = req.body.data;
         product.admin = req.decoded.uid;
         product.price = Number(price);
         product.minimum = Number(minimum);
         product.available = Number(available);
+        if (product.minimum > product.available) return res.status(400).send({ ok: false, text: `Minimum cannot be greater than available` });
         const result = await partCollection.insertOne(product); // insert order in db
         res.send({ ok: true, text: `Product added successfully`, result });
     }); // Add a new product
